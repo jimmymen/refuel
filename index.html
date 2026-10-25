@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飞行燃油计划 & 加油计算器</title>
+    <style>
+        :root {
+            --primary-blue: #0056b3;
+            --primary-green: #28a745;
+            --bg-color: #f4f7f9;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            padding: 20px;
+            margin: 0;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        
+        /* 通用样式 */
+        h2 { margin: 0; padding: 20px; text-align: center; font-size: 1.2rem; }
+        .section-header {
+            background-color: #eee;
+            padding: 10px 20px;
+            font-weight: bold;
+            color: #555;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-body { padding: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #444; font-size: 0.95rem; }
+        
+        /* 输入框样式 */
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 18px; /* 手机上更大易点 */
+            box-sizing: border-box;
+            font-family: monospace; /* 数字对齐 */
+        }
+        input:focus { border-color: var(--primary-blue); outline: none; }
+        
+        .input-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .input-wrapper { flex: 1; position: relative; }
+        .suffix {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #888;
+            font-size: 0.9em;
+            pointer-events: none;
+        }
+        .hint { font-size: 12px; color: #888; margin-top: 4px; }
+
+        /* --- 模块1：飞行计划 (绿色主题) --- */
+        .plan-section .section-header { background-color: #e8f5e9; color: #1b5e20; }
+        .plan-section input:focus { border-color: var(--primary-green); }
+        .plan-result {
+            background-color: #f1f8e9;
+            border: 1px dashed #a5d6a7;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 0.95rem;
+        }
+        .plan-highlight { font-weight: bold; color: var(--primary-green); }
+
+        /* 连接箭头 */
+        .arrow-divider {
+            text-align: center;
+            color: #ccc;
+            font-size: 24px;
+            line-height: 1;
+            margin: -10px 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* --- 模块2：加油计算 (蓝色主题) --- */
+        .calc-section .section-header { background-color: #e3f2fd; color: #0d47a1; }
+        
+        /* 密度栏 */
+        .density-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafafa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+        .density-input { width: 80px !important; padding: 5px !important; font-size: 14px !important; text-align: center; }
+
+        /* 最终结果 */
+        .final-result {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 20px;
+            border: 1px solid #90caf9;
+        }
+        #resultVolume { font-size: 48px; font-weight: 800; color: #d32f2f; display: block; line-height: 1.1; }
+        .unit-large { font-size: 20px; color: #555; font-weight: normal; }
+
+        /* 按钮 */
+        .btn-reset {
+            width: 100%;
+            padding: 15px;
+            background: #607d8b;
+            color: white;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            border-top: 1px solid #546e7a;
+        }
+
+        /* 辅助显示磅的灰色小字 */
+        .lbs-display {
+            display: block;
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 2px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- 模块 1: 飞行计划 -->
+    <div class="plan-section">
+        <div class="section-header">
+            <span>📋</span> 阶段一：飞行燃油计划
+        </div>
+        <div class="section-body">
+            <!-- 飞行时间 -->
+            <label>预计飞行时间 (Flight Time)</label>
+            <div class="input-wrapper">
+                <input type="number" id="flightTime" placeholder="例如: 225 或 0225" oninput="calculatePlan()">
+                <div class="hint">输入格式 HHMM，例如 225 代表 2小时25分</div>
+            </div>
+
+            <br>
+
+            <!-- 耗油率 & 保留油量 -->
+            <div class="input-row">
+                <div class="input-wrapper">
+                    <label>耗油率 (T/h)</label>
+                    <input type="number" id="fuelFlow" value="1.2" step="0.1" oninput="calculatePlan()">
+                </div>
+                <div class="input-wrapper">
+                    <label>落地剩余 (T)</label>
+                    <input type="number" id="reserves" value="3.0" step="0.1" oninput="calculatePlan()">
+                </div>
+            </div>
+
+            <!-- 计划结果展示 -->
+            <div class="plan-result">
+                <div>空中耗油: <span id="dispTrip" class="plan-highlight">0.0</span> 吨 <span id="dispTripLbs" class="lbs-display">(0 lbs)</span></div>
+                <div style="margin-top:8px; border-top:1px solid #ccc; padding-top:8px;">
+                    <strong>目标总油量: <span id="dispTotal" class="plan-highlight" style="font-size:1.2em">0.0</span> 吨</strong>
+                    <span id="dispTotalLbs" class="lbs-display">(0 lbs)</span>
+                </div>
+                <div style="font-size:12px; color:#888; margin-top:5px;">* 此数值已自动填入下方计算器</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 连接箭头 -->
+    <div class="arrow-divider">⬇</div>
+
+    <!-- 模块 2: 加油计算器 -->
+    <div class="calc-section">
+        <div class="section-header">
+            <span>⛽</span> 阶段二：加油体积计算
+        </div>
+        
+        <!-- 密度设置 -->
+        <div class="density-bar">
+            <span>燃油密度 (Density kg/L)</span>
+            <input type="number" id="density" value="0.800" step="0.001" class="density-input" oninput="calculateVolume()">
+        </div>
+
+        <div class="section-body">
+            <!-- 目标油量 (可被上方联动，也可手动修改) -->
+            <label>1. 目标总油量 (Target Fuel)</label>
+            <div class="input-row">
+                <div class="input-wrapper">
+                    <input type="number" id="targetTons" placeholder="吨 (T)" step="0.1" oninput="syncUnits('target', 'tons')">
+                    <span class="suffix">吨</span>
+                </div>
+                <div class="input-wrapper">
+                    <input type="number" id="targetLbs" placeholder="磅 (Lbs)" step="100" oninput="syncUnits('target', 'lbs')">
+                    <span class="suffix">磅</span>
+                </div>
+            </div>
+
+            <!-- 飞机剩余油量 -->
+            <label>2. 飞机当前剩余油量 (Remaining)</label>
+            <div class="input-row">
+                <div class="input-wrapper">
+                    <input type="number" id="remTons" placeholder="吨 (T)" step="0.1" oninput="syncUnits('rem', 'tons')">
+                    <span class="suffix">吨</span>
+                </div>
+                <div class="input-wrapper">
+                    <input type="number" id="remLbs" placeholder="磅 (Lbs)" step="100" oninput="syncUnits('rem', 'lbs')">
+                    <span class="suffix">磅</span>
+                </div>
+            </div>
+
+            <!-- 最终结果 -->
+            <div class="final-result">
+                <label style="margin-bottom:5px; color:#004a99;">实际加注体积 / Uplift Volume</label>
+                <span id="resultVolume">0</span>
+                <span class="unit-large">升 (L)</span>
+                <div style="margin-top:10px; font-size: 14px; color: #555;">
+                    预计加注重量: <span id="resultWeight">0</span> kg
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn-reset" onclick="resetAll()">重置所有数据</button>
+
+</div>
+
+<script>
+    // --- 常量 ---
+    const LBS_PER_TON = 2204.62262;
+    const KG_PER_TON = 1000;
+
+    // --- DOM 元素引用 ---
+    const els = {
+        // 计划部分
+        flightTime: document.getElementById('flightTime'),
+        fuelFlow: document.getElementById('fuelFlow'),
+        reserves: document.getElementById('reserves'),
+        dispTrip: document.getElementById('dispTrip'),
+        dispTripLbs: document.getElementById('dispTripLbs'),
+        dispTotal: document.getElementById('dispTotal'),
+        dispTotalLbs: document.getElementById('dispTotalLbs'),
+        
+        // 计算部分
+        density: document.getElementById('density'),
+        targetTons: document.getElementById('targetTons'),
+        targetLbs: document.getElementById('targetLbs'),
+        remTons: document.getElementById('remTons'),
+        remLbs: document.getElementById('remLbs'),
+        resVol: document.getElementById('resultVolume'),
+        resWeight: document.getElementById('resultWeight')
+    };
+
+    // --- 逻辑 1: 飞行计划计算 ---
+    function calculatePlan() {
+        const rawTime = els.flightTime.value; // 获取字符串，如 "225"
+        const flow = parseFloat(els.fuelFlow.value) || 0;
+        const res = parseFloat(els.reserves.value) || 0;
+
+        if (!rawTime) return; // 如果没有时间，暂不计算
+
+        // 解析时间 HHMM
+        let hours = 0;
+        let minutes = 0;
+        
+        // 将输入当做数字处理 (例如 225 -> 225)
+        const timeNum = parseInt(rawTime, 10);
+        if (!isNaN(timeNum)) {
+            hours = Math.floor(timeNum / 100); // 225 / 100 = 2
+            minutes = timeNum % 100;           // 225 % 100 = 25
+        }
+
+        // 转换为十进制小时
+        const decimalTime = hours + (minutes / 60);
+
+        // 计算
+        const tripFuel = decimalTime * flow;
+        const totalFuel = tripFuel + res;
+
+        // 更新计划部分的UI显示
+        updatePlanUI(tripFuel, totalFuel);
+
+        // **关键联动**: 将计算出的总油量自动填入下方 "目标总油量 (吨)"
+        els.targetTons.value = totalFuel.toFixed(3); // 保留3位小数精度
+        
+        // 触发下方计算器的同步逻辑 (把吨换算成磅，并计算最终升数)
+        syncUnits('target', 'tons'); 
+    }
+
+    function updatePlanUI(trip, total) {
+        // 格式化显示
+        els.dispTrip.textContent = trip.toFixed(2);
+        els.dispTripLbs.textContent = `(${(trip * LBS_PER_TON).toLocaleString('en-US', {maximumFractionDigits: 0})} lbs)`;
+        
+        els.dispTotal.textContent = total.toFixed(2);
+        els.dispTotalLbs.textContent = `(${(total * LBS_PER_TON).toLocaleString('en-US', {maximumFractionDigits: 0})} lbs)`;
+    }
+
+
+    // --- 逻辑 2: 加油单位同步 & 体积计算 ---
+    
+    // 当输入框变化时，同步 吨 <-> 磅
+    function syncUnits(type, unit) {
+        const tonsInput = type === 'target' ? els.targetTons : els.remTons;
+        const lbsInput = type === 'target' ? els.targetLbs : els.remLbs;
+
+        if (unit === 'tons') {
+            const val = parseFloat(tonsInput.value);
+            if (!isNaN(val)) {
+                lbsInput.value = (val * LBS_PER_TON).toFixed(0); 
+            } else {
+                lbsInput.value = '';
+            }
+        } else {
+            const val = parseFloat(lbsInput.value);
+            if (!isNaN(val)) {
+                tonsInput.value = (val / LBS_PER_TON).toFixed(3);
+            } else {
+                tonsInput.value = '';
+            }
+        }
+        // 无论改了哪个，最后都去算体积
+        calculateVolume();
+    }
+
+    // 最终计算体积
+    function calculateVolume() {
+        const density = parseFloat(els.density.value) || 0.8;
+        
+        const targetT = parseFloat(els.targetTons.value) || 0;
+        const remT = parseFloat(els.remTons.value) || 0;
+
+        let diffTons = targetT - remT;
+        if (diffTons < 0) diffTons = 0;
+
+        const diffKg = diffTons * KG_PER_TON;
+        const volume = diffKg / density;
+
+        // 更新结果
+        els.resVol.textContent = volume.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        els.resWeight.textContent = diffKg.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+
+    // --- 重置 ---
+    function resetAll() {
+        // 清空文本框
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => input.value = '');
+        
+        // 恢复默认值
+        els.density.value = "0.800";
+        els.fuelFlow.value = "1.2";
+        els.reserves.value = "3.0";
+        
+        // 清空显示文本
+        els.resVol.textContent = "0";
+        els.resWeight.textContent = "0";
+        els.dispTrip.textContent = "0.0";
+        els.dispTotal.textContent = "0.0";
+        els.dispTripLbs.textContent = "(0 lbs)";
+        els.dispTotalLbs.textContent = "(0 lbs)";
+    }
+
+</script>
+
+</body>
+</html>
